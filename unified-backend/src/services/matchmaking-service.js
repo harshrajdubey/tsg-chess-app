@@ -6,7 +6,6 @@ const TIME_CONTROLS = {
     bullet: { initialMs: 60000, incrementMs: 0 },
     blitz: { initialMs: 300000, incrementMs: 0 },
     rapid: { initialMs: 600000, incrementMs: 0 },
-    puzzles: { initialMs: 0, incrementMs: 0 },
 };
 
 let isRunning = false;

@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const { connectMongo } = require('./lib/db');
+const { connectPostgres } = require('./lib/db');
 const { initSocket } = require('./services/socket-service');
 
 // Import Routes
@@ -49,7 +49,7 @@ app.use('/leaderboard', leaderboardRoutes);
 app.use('/ratings', ratingRoutes);
 
 // Health
-app.get('/health', (_req, res) => res.json({ status: 'healthy', service: 'unified-backend' }));
+app.get('/health', (_req, res) => res.json({ status: 'healthy', service: 'unified-backend', database: 'postgresql' }));
 
 // 404
 app.use((req, res) => {
@@ -58,12 +58,13 @@ app.use((req, res) => {
 
 // Start
 const startServer = async () => {
-  await connectMongo();
+  await connectPostgres();
   initSocket(server, allowedOrigins);
 
   server.listen(PORT, () => {
     console.log(`✅ Unified backend running on port ${PORT}`);
     console.log(`✅ Socket.IO server attached`);
+    console.log(`✅ Database: PostgreSQL`);
   });
 };
 

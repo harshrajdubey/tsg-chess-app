@@ -5,12 +5,14 @@
 **Chess Platform** is a modern, high-performance real-time multiplayer chess application built for seamless competitive play. It solves the problem of reliable, low-latency chess matchmaking and gameplay handling in a distributed environment.
 
 **Key Features:**
-- **Real-time Multiplayer:** Instant move updates and game state synchronization using WebSockets.
-- **Matchmaking System:** Intelligent queuing system that pairs players based on rating and time controls (Bullet, Blitz, Rapid).
-- **Pro Performance:** Optimized for low latency, handling rapid-fire moves without desync.
-- **Elo Rating System:** Full implementation of the Elo rating algorithm to track player skill progression.
-- **Game History & Analytics:** Persistent storage of past games with detailed result tracking (Checkmate, Timeout, Resignation, Draw).
-- **Robust State Management:** Redis-backed active game state ensuring data integrity even during server restarts.
+- **Real-time Multiplayer:** Instant move updates using WebSockets with optimistic UI updates
+- **Matchmaking System:** Intelligent queuing system that pairs players based on rating and time controls (Bullet, Blitz, Rapid)
+- **Play vs Computer:** Integrated Stockfish engine with adaptive difficulty based on player rating
+- **In-Game Chat:** Real-time messaging between players during games
+- **Pro Performance:** Optimized for low latency with incremental state updates
+- **Elo Rating System:** Full implementation of the Elo rating algorithm
+- **Game History & Analytics:** Persistent storage of past games with detailed result tracking
+- **PostgreSQL + Redis:** PostgreSQL for persistent data, Redis for real-time game state
 
 ## 2️⃣ Folder & File Structure
 
@@ -20,71 +22,91 @@ Built with React, TypeScript, and Vite for a lightning-fast frontend experience.
 ```
 client/
 ├── src/
-│   ├── pages/         # High-level application views
-│   │   ├── Game.tsx       # Main gameplay interface (board, timer, chat)
-│   │   ├── Profile.tsx    # User stats, history, and settings
-│   │   ├── Matchmaking.tsx# Queue interface and mode selection
-│   │   └── Login.tsx      # Authentication forms
-│   ├── components/    # Reusable UI building blocks
-│   │   ├── ui/            # Atomic visual components (Buttons, Cards, Inputs)
-│   │   └── ChessBoard/    # Complex game board rendering logic
-│   ├── hooks/         # Custom React hooks
-│   │   ├── use-auth.tsx   # User session management
-│   │   └── use-socket.tsx # WebSocket connection abstraction
-│   ├── lib/           # Core utilities
-│   │   ├── api.ts         # REST API client wrapper
-│   │   └── chess-utils.ts # Helper functions for move validation
-│   └── context/       # Global state providers (Auth, Socket)
+│   ├── pages/           # High-level application views
+│   │   ├── Game.tsx         # Main gameplay interface (board, timer, chat)
+│   │   ├── ComputerGame.tsx # Play against Stockfish
+│   │   ├── Matchmaking.tsx  # Queue interface and mode selection
+│   │   ├── Profile.tsx      # User stats, history, and settings
+│   │   └── Login.tsx        # Authentication forms
+│   ├── components/      # Reusable UI building blocks
+│   │   ├── ui/              # Atomic visual components (Buttons, Cards, Inputs)
+│   │   └── chess/           # Chess-specific components (Board, Panel)
+│   ├── hooks/           # Custom React hooks
+│   │   ├── use-auth.ts      # User session management
+│   │   └── use-toast.ts     # Toast notifications
+│   ├── lib/             # Core utilities
+│   │   └── api.ts           # REST API client wrapper
+│   └── context/         # Global state providers
+│       └── SocketContext.tsx # WebSocket connection abstraction
+├── .env.example         # Environment variables template
 ```
 
 ### Backend (`/unified-backend`)
-A unified Node.js/Express server handling API requests, WebSocket events, and game logic execution.
+A unified Node.js/Express server handling API requests, WebSocket events, and game logic.
 
 ```
 unified-backend/
 ├── src/
-│   ├── models/        # MongoDB Schemas (User, GameHistory)
-│   ├── routes/        # REST API Endpoints
-│   │   ├── auth.js        # JWT authentication logic
-│   │   └── games.js       # Game controls (resign, timeout)
-│   ├── services/      # Core Business Logic
-│   │   ├── game-service.js       # Rules enforcement, state updates, game over logic
-│   │   ├── socket-service.js     # Real-time event handling (connection, moves)
-│   │   └── matchmaking-service.js# Queue management and pairing logic
-│   ├── lib/           # Shared Libraries
-│   │   └── rating.js      # Elo calculation algorithms
-│   └── index.js       # Server entry point
-├── scripts/       # Maintenance utilities
-│   └── clear-redis.js # State cleanup tools
+│   ├── repositories/    # Data access layer (PostgreSQL)
+│   │   ├── UserRepository.js       # User CRUD operations
+│   │   └── GameHistoryRepository.js # Game history storage
+│   ├── routes/          # REST API Endpoints
+│   │   ├── auth.js          # JWT authentication
+│   │   ├── games.js         # Game controls (resign, timeout)
+│   │   ├── computer.js      # Computer game endpoints
+│   │   └── matchmaking.js   # Queue management
+│   ├── services/        # Core Business Logic
+│   │   ├── game-service.js         # Rules enforcement, state updates
+│   │   ├── socket-service.js       # Real-time events (moves, chat)
+│   │   ├── matchmaking-service.js  # Queue management and pairing
+│   │   └── stockfish-service.js    # Stockfish integration
+│   ├── lib/             # Shared Libraries
+│   │   ├── db.js            # PostgreSQL + Redis connections
+│   │   └── rating.js        # Elo calculation algorithms
+│   └── index.js         # Server entry point
+├── migrations/          # Database migrations
+│   └── init.sql         # Initial schema (users, game_history)
+├── .env.example         # Environment variables template
 ```
 
 ## 3️⃣ How to Run the Project
 
 ### Prerequisites
-- **Node.js** (v16+)
-- **Redis Server** (Running locally or hosted)
-- **MongoDB** (Running locally or Atlas URI)
+- **Node.js** (v18+)
+- **Docker & Docker Compose** (for PostgreSQL and Redis)
+- **Stockfish** (optional, for computer games - install via `apt install stockfish` or download from stockfishchess.org)
 
 ### Environment Setup
-Create a `.env` file in `unified-backend/`:
-```env
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/chess-app
-JWT_SECRET=your_super_secret_key
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-CLIENT_URL=http://localhost:5173
-```
+
+1. **Start the databases:**
+   ```bash
+   docker-compose up -d
+   ```
+   This starts PostgreSQL (port 5433) and Redis (port 6379) with persistent volumes.
+
+2. **Configure backend environment:**
+   ```bash
+   cd unified-backend
+   cp .env.example .env
+   # Edit .env if needed (defaults work for local development)
+   ```
+
+3. **Configure frontend environment:**
+   ```bash
+   cd client
+   cp .env.example .env
+   # Edit .env if deploying (defaults work for local development)
+   ```
 
 ### Step-by-Step Startup
 
-1.  **Start the Backend**
+1.  **Install dependencies & Start the Backend**
     ```bash
     cd unified-backend
     npm install
     npm run dev
     ```
-    *Output should confirm: "Connected to MongoDB", "Connected to Redis", "Server running on port 3001"*
+    *Output should confirm: "Connected to PostgreSQL", "Connected to Redis", "Server running on port 3001"*
 
 2.  **Start the Frontend**
     ```bash
@@ -92,74 +114,115 @@ CLIENT_URL=http://localhost:5173
     npm install
     npm run dev
     ```
-    *Output should show local server link: http://localhost:5173*
+    *Output should show local server link: http://localhost:8080*
 
 3.  **Play!**
-    Open `http://localhost:5173` in two different browser windows (or incognito) to simulate two players.
+    Open `http://localhost:8080` in two different browser windows (or incognito) to simulate two players.
 
 ## 4️⃣ How the Game Works (Runtime Flow)
 
 1.  **Authentication:** User registers/logs in -> Server issues JWT -> Client stores token.
 2.  **Matchmaking:** User selects mode (e.g., Blitz) -> Client sends request -> Backend adds user to Redis Queue.
-3.  **Pairing:** Interval runs every 2s -> Checks queue -> Pairs users with similar ELO -> Creates Game ID -> Emits `match_found`.
+3.  **Pairing:** Interval runs every 1s -> Checks queue -> Pairs users with similar ELO -> Creates Game ID -> Emits `match_found`.
 4.  **Game Initialization:** Clients receive Game ID -> Connect to Socket Room `game:{id}` -> Fetch initial state.
 5.  **Gameplay:**
-    *   Player A makes move -> Client validates move locally -> Emits `move` event.
-    *   Server validates move (chess.js) -> Updates Redis state -> Broadcasts `move_applied`.
-    *   Player B receives `move_applied` -> Updates board.
-6.  **Game Over:** Checkmate/Resign/Timeout -> Server calculates result -> Updates MongoDB History & Ratings -> Broadcasts `game_over`.
-7.  **Post-Game:** Modal appears with result and rating change -> Redis active game key expires.
+    *   Player A makes move -> Client applies move **optimistically** (instant UI update) -> Emits `move` event.
+    *   Server validates move (chess.js) -> Updates Redis state -> Broadcasts `move_made` (incremental) & `game_state`.
+    *   Player B receives update -> Board syncs automatically.
+    *   If move was invalid, Player A receives `move_error` and board reverts.
+6.  **Chat:** Players can send messages via `chat_message` event -> Stored in Redis -> Broadcast to room.
+7.  **Game Over:** Checkmate/Resign/Timeout/Draw -> Server calculates result -> Updates PostgreSQL -> Broadcasts `game_over`.
+8.  **Post-Game:** Modal appears with result and rating change.
 
-## 5️⃣ Algorithms Used
+### Computer Game Flow
+1.  User selects "Play Computer" with difficulty (easy/normal/hard).
+2.  Backend creates game, calculates appropriate Stockfish level from user's rating.
+3.  User makes move -> Backend validates -> Stockfish calculates response -> Both moves returned.
+4.  Game ends -> Result shown (no rating changes for computer games).
 
-*   **Chess Logic:** Powered by `chess.js` for move generation, validation, and FEN string manipulation.
-*   **Matchmaking:** Reliable Queue-based system. Users are bucketed by Time Control. Simple greedy matching pairs users within a rating deviation threshold (currently strict, expandable).
-*   **Elo Rating:** Standard Elo algorithm. (cannocial elo formulation)
-    *   `ExpectedScore = 1 / (1 + 10^((RatingB - RatingA) / 400))`
-    *   `NewRating = OldRating + K * (ActualScore - ExpectedScore)` (K=32).
-*   **State Locking:** Redis atomic operations (SETNX) used to prevent race conditions during move processing and Game Over claims.
+## 5️⃣ WebSocket Events
 
-## 6️⃣ System Architecture
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connect` | Client -> Server | Authenticate with JWT |
+| `join_game` | Client -> Server | Join a game room |
+| `move` | Client -> Server | Send a chess move |
+| `move_made` | Server -> Client | Incremental move update |
+| `game_state` | Server -> Client | Full game state |
+| `move_error` | Server -> Client | Invalid move error |
+| `game_over` | Server -> Client | Game ended |
+| `chat_message` | Bidirectional | In-game chat |
+| `typing_start` | Client -> Server | Typing indicator |
+| `offer_draw` | Client -> Server | Offer a draw |
+| `draw_offered` | Server -> Client | Draw offer received |
+| `match_found` | Server -> Client | Matchmaking success |
 
-The system follows a **Stateful Hybrid Architecture**:
-
-```
-[Client A] <--(WebSocket)--> [Node.js Server] <--(WebSocket)--> [Client B]
-                                   |
-                             [Redis Cache] <--- (Active Game States, Matchmaking Queues)
-                                   |
-                             [MongoDB DB]  <--- (User Profiles, Game History)
-```
-
-*   **Hot Data (Redis):** Moves, timers, active game sessions. Optimized for speed using in-memory operations.
-*   **Cold Data (MongoDB):** Persistent user records, match history. Optimized for reliability and analytics.
-*   **Realtime Layer:** Socket.IO serves as the event bus, pushing state changes instantly to connected clients.
-
-## 7️⃣ Error Handling & Reliability
-
-*   **Reconnection Logic:** Client automatically attempts to rejoin the socket room if connection drops. `fetchGameState` runs on mount to sync any missed events.
-*   **Stale State Protection:** Backend tracks `lastMoveTimestamp`. Validates moves against current Redis state to prevent "ghost moves" from laggy clients.
-*   **Crash Recovery:** Since active game state lives in Redis (external to Node process), the server can restart without killing active games. Players simply reconnect.
-*   **Auth Failures:** JWT expiry or invalid tokens trigger an automatic logout/redirect to login on the client.
-
-## 8️⃣ Tech Stack
+## 6️⃣ Tech Stack
 
 **Frontend:**
 *   React 18 + TypeScript
 *   Vite (Build Tool)
 *   TailwindCSS (Styling)
 *   Shadcn/UI (Component Library)
-*   Chess.js / React-Chessboard
+*   Chess.js / Custom ChessBoard
+*   Socket.IO Client
 
 **Backend:**
 *   Node.js + Express
 *   Socket.IO (WebSockets)
-*   Redis (ioredis)
-*   MongoDB (Mongoose)
+*   PostgreSQL (pg) - Persistent data
+*   Redis (ioredis) - Real-time state
+*   Stockfish - Chess engine
+
+**Infrastructure:**
+*   Docker Compose (PostgreSQL + Redis)
+
+## 7️⃣ Environment Variables
+
+### Backend (`unified-backend/.env`)
+```env
+PORT=3001
+DATABASE_URL=postgresql://chess_user:chess_password_secure@localhost:5433/chess_platform
+REDIS_HOST=localhost
+REDIS_PORT=6379
+JWT_SECRET=your_super_secret_key
+CORS_ORIGIN=http://localhost:8080,http://localhost:5173
+```
+
+### Frontend (`client/.env`)
+```env
+VITE_API_BASE_URL=http://localhost:3001
+VITE_WS_BASE_URL=http://localhost:3001
+```
+
+## 8️⃣ Database Schema
+
+### Users Table
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | VARCHAR | Unique user identifier |
+| username | VARCHAR | Display name |
+| email | VARCHAR | Email address |
+| password | VARCHAR | Bcrypt hash |
+| bullet/blitz/rapid | INTEGER | Ratings per time control |
+| games_played | INTEGER | Total games |
+| games_won | INTEGER | Wins |
+
+### Game History Table
+| Column | Type | Description |
+|--------|------|-------------|
+| game_id | VARCHAR | Unique game identifier |
+| user_id | VARCHAR | Player reference |
+| opponent_user_id | VARCHAR | Opponent reference |
+| result | ENUM | won/lost/draw |
+| rating_change | INTEGER | Elo change |
+| time_control | VARCHAR | bullet/blitz/rapid |
+| moves | JSONB | Move history |
 
 ## 9️⃣ Future Improvements
 
--   **Spectator Mode:** Allow users to watch live games by joining existing socket rooms.
--   **Engine Analysis:** Integrate Stockfish WASM for post-game analysis on the client.
--   **Chat System:** Real-time chat within game rooms using the existing socket connection.
--   **Deployment pipelines:** Dockerize services for easy orchestration.
+-   **Spectator Mode:** Allow users to watch live games
+-   **Engine Analysis:** Post-game analysis with Stockfish
+-   **Rematch System:** Quick rematch with same opponent
+-   **Tournament Mode:** Bracket-style tournaments
+-   **Mobile App:** React Native port

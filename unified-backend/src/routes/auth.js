@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const User = require('../models/User');
+const UserRepository = require('../repositories/UserRepository');
 const { JWT_SECRET } = require('../middleware/auth');
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -16,7 +16,7 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Username, email, password, and hall of residence are required' });
         }
 
-        const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+        const existingUser = await UserRepository.findByUsernameOrEmail(username, email);
         if (existingUser) {
             return res.status(409).json({ error: 'Username or email already exists' });
         }
@@ -24,19 +24,17 @@ router.post('/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const userId = uuidv4();
 
-        const user = new User({
+        const user = await UserRepository.create({
             userId,
             username,
             email,
             password: hashedPassword,
             hallOfResidence,
         });
-        await user.save();
 
         const token = jwt.sign({ userId, username, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
-        const { password: _, ...userResponse } = user.toObject();
-        res.status(201).json({ message: 'User created', user: userResponse, token });
+        res.status(201).json({ message: 'User created', user, token });
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -51,18 +49,22 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ error: 'Required fields missing' });
         }
 
-        const user = await User.findOne({ username });
+        const user = await UserRepository.findByUsername(username, false); // Include password for comparison
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        user.isOnline = true;
-        await user.save();
+        await UserRepository.setOnline(user.userId, true);
 
-        const token = jwt.sign({ userId: user.userId, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+        const token = jwt.sign(
+            { userId: user.userId, username: user.username, email: user.email }, 
+            JWT_SECRET, 
+            { expiresIn: JWT_EXPIRES_IN }
+        );
 
-        const { password: _, ...userResponse } = user.toObject();
-        res.json({ message: 'Login successful', user: userResponse, token });
+        // Remove password from response
+        delete user.password;
+        res.json({ message: 'Login successful', user, token });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Internal server error' });
