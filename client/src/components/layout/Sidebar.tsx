@@ -25,7 +25,6 @@ interface SidebarProps {
 
 const navItems = [
   { icon: Gamepad2, label: 'Play', path: '/play' },
-  { icon: Puzzle, label: 'Puzzles', path: '/puzzles' },
   { icon: User, label: 'Profile', path: '/profile' },
   { icon: Crown, label: 'Leaderboard', path: '/leaderboard' },
 ];

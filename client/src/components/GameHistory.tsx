@@ -81,7 +81,7 @@ export const GameHistory: React.FC<{ games: api.GameHistoryEntry[] }> = ({ games
 
                     {/* Opponent */}
                     <div className="col-span-2">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col text-center">
                         <span className="text-sm text-muted-foreground">vs</span>
                         <span className="font-medium text-foreground">{g.opponentUsername || "Unknown"}</span>
                       </div>

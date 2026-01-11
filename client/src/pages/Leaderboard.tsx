@@ -6,7 +6,6 @@ const TIME_CONTROLS = [
   { label: 'Bullet', value: 'bullet' },
   { label: 'Blitz', value: 'blitz' },
   { label: 'Rapid', value: 'rapid' },
-  { label: 'Puzzles', value: 'puzzles' }
 ];
 
 export default function Leaderboard() {

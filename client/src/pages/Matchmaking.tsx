@@ -8,10 +8,11 @@ import * as api from '@/lib/api';
 import { Clock, Search, X, Loader2 } from 'lucide-react';
 
 const Matchmaking = () => {
-  type RatingKey = 'bullet' | 'blitz' | 'rapid' | 'puzzles';
+  type RatingKey = 'bullet' | 'blitz' | 'rapid';
   const { user, isAuthenticated } = useAuth();
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
+  
   const [timeControls, setTimeControls] = useState<Record<string, api.TimeControl>>({});
   const [selectedTimeControl, setSelectedTimeControl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,70 +27,72 @@ const Matchmaking = () => {
   const ratingKey = useMemo(() => (selectedTimeControl || 'blitz') as RatingKey, [selectedTimeControl]);
 
   useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) navigate('/login');
   }, [isAuthenticated, navigate]);
 
-  // Check status on mount AND when socket reconnects
+  // Fetch time controls on mount
   useEffect(() => {
-    const checkStatus = async () => {
-      if (!isAuthenticated || !user) return;
+    const fetchTimeControls = async () => {
+      try {
+        const controls = await api.getTimeControls();
+        if (isMounted.current) {
+          setTimeControls(controls);
+          const firstKey = Object.keys(controls)[0];
+          if (firstKey && !selectedTimeControl) setSelectedTimeControl(firstKey);
+        }
+      } catch {
+        // Retry after 2s
+        setTimeout(fetchTimeControls, 2000);
+      }
+    };
+    fetchTimeControls();
+  }, [selectedTimeControl]);
+
+  // Check for existing game on mount
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    
+    const checkExistingGame = async () => {
       try {
         const token = localStorage.getItem('auth_token');
         if (!token) return;
-
-        // Load configs only once
-        if (Object.keys(timeControls).length === 0) {
-          const controls = await api.getTimeControls();
-          if (isMounted.current) {
-            setTimeControls(controls);
-            const firstKey = Object.keys(controls)[0];
-            if (firstKey && !selectedTimeControl) setSelectedTimeControl(firstKey);
-          }
-        }
-
-        // Check matchmaking/game status
+        
         const status = await api.getMatchmakingStatus(user.userId, token);
-        if (isMounted.current) {
-          if (status.inQueue) {
-            setIsInQueue(true);
-            setActiveQueueType(status.timeControl);
-            setJoinedAt(status.joinedAt);
-            hasJoinedQueue.current = true;
-          } else if (status.hasGame && status.gameId) {
-            // If we have a game, go to it immediately
-            navigate(`/game/${status.gameId}`);
-          } else {
-            // Not in queue, no game. 
-            // If we THOUGHT we were in queue (local state), but server says no, 
-            // it means we might have been removed or matched-but-missed.
-            // But getMatchmakingStatus checks activeGame. 
-            // So if hasGame is false, we are truly idle.
-            // Reset local state if needed.
-            if (isInQueue) {
-              setIsInQueue(false);
-              setJoinedAt(null);
-              hasJoinedQueue.current = false;
-            }
-          }
+        if (status.hasGame && status.gameId) {
+          navigate(`/game/${status.gameId}`);
+        } else if (status.inQueue) {
+          setIsInQueue(true);
+          setActiveQueueType(status.timeControl || null);
+          setJoinedAt(status.joinedAt || Date.now());
+          hasJoinedQueue.current = true;
         }
-      } catch (err) {
-        if (isMounted.current) setError('Failed to sync status');
+      } catch {
+        // Ignore
       }
     };
-
-    checkStatus();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, user, isConnected]); // Run when connection restores
+    
+    checkExistingGame();
+  }, [isAuthenticated, user, navigate]);
 
   // Socket Listener for Match Found
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      console.log('[Matchmaking] No socket available');
+      return;
+    }
+
+    console.log('[Matchmaking] Setting up match_found listener, connected:', socket.connected);
 
     const onMatchFound = (data: { gameId: string }) => {
-      console.log('Match found!', data);
+      console.log('[Matchmaking] Match found!', data);
       setIsInQueue(false);
       setIsLoading(false);
+      hasJoinedQueue.current = false;
       navigate(`/game/${data.gameId}`);
     };
 
@@ -106,14 +109,17 @@ const Matchmaking = () => {
       setWaitTime(0);
       return;
     }
+    
     const interval = setInterval(() => {
       setWaitTime(Date.now() - joinedAt);
     }, 500);
+    
     return () => clearInterval(interval);
   }, [isInQueue, joinedAt]);
 
   const handleJoinQueue = async () => {
-    if (!user || !selectedTimeControl || hasJoinedQueue.current || (activeQueueType && activeQueueType !== selectedTimeControl)) return;
+    if (!user || !selectedTimeControl || hasJoinedQueue.current) return;
+    
     setIsLoading(true);
     setError(null);
     hasJoinedQueue.current = true;
@@ -127,7 +133,6 @@ const Matchmaking = () => {
 
       setIsInQueue(true);
       setJoinedAt(Date.now());
-      // No polling needed; socket will notify
     } catch (err: unknown) {
       const error = err as Error;
       setError(error.message || 'Failed to join queue');
@@ -144,6 +149,7 @@ const Matchmaking = () => {
     setIsLoading(true);
     hasJoinedQueue.current = false;
     setActiveQueueType(null);
+    
     try {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -154,14 +160,13 @@ const Matchmaking = () => {
     } catch (err: unknown) {
       const error = err as Error;
       setError(error.message || 'Failed to leave queue');
-      setIsInQueue(false); // Assume left anyway locally to reset UI
+      setIsInQueue(false);
       setJoinedAt(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Helper formatting functions
   const formatTime = (ms: number) => {
     const safeMs = Math.max(0, ms);
     const seconds = Math.floor(safeMs / 1000);
@@ -169,6 +174,7 @@ const Matchmaking = () => {
     const secs = seconds % 60;
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
+
   const formatTimeControl = (control: api.TimeControl) => {
     if (!control) return '';
     const minutes = Math.floor(control.initialMs / 60000);
@@ -177,10 +183,10 @@ const Matchmaking = () => {
     const timeStr = `${minutes}${seconds > 0 ? `:${seconds.toString().padStart(2, '0')}` : ''}`;
     return increment > 0 ? `${timeStr}+${increment}` : timeStr;
   };
+
   const getTimeControlLabel = (key: string) => {
     const labels: Record<string, string> = {
       bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical',
-      bullet_increment: 'Bullet', blitz_increment: 'Blitz', rapid_increment: 'Rapid',
     };
     return labels[key] || key;
   };
@@ -190,32 +196,38 @@ const Matchmaking = () => {
   return (
     <MainLayout>
       <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-xl">
           <div className="bg-card border border-border rounded-lg shadow-lg p-6 md:p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Find a Match</h1>
-              <p className="text-muted-foreground">Select a time control and start playing</p>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Play Chess</h1>
+              <p className="text-muted-foreground">
+                {isConnected ? '🟢 Connected' : '🔴 Connecting...'}
+              </p>
             </div>
+
             {error && (
               <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-sm">
                 {error}
               </div>
             )}
+
             {!isInQueue ? (
               <div className="space-y-6">
+                {/* Time Control Selection */}
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-3">
                     Select Time Control
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {Object.entries(timeControls).map(([key, control]) => (
                       <button
                         key={key}
-                        onClick={() => { if (!isInQueue) setSelectedTimeControl(key) }}
-                        className={`p-4 rounded-lg border-2 transition-all text-left ${selectedTimeControl === key
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/50'
-                          }`}
+                        onClick={() => setSelectedTimeControl(key)}
+                        className={`p-4 rounded-lg border-2 transition-all text-left ${
+                          selectedTimeControl === key
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border hover:border-primary/50'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -235,9 +247,11 @@ const Matchmaking = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* Action Button */}
                 <Button
                   onClick={handleJoinQueue}
-                  disabled={isLoading || !selectedTimeControl}
+                  disabled={isLoading || !selectedTimeControl || !isConnected}
                   className="w-full"
                   size="lg"
                 >
@@ -249,7 +263,7 @@ const Matchmaking = () => {
                   ) : (
                     <>
                       <Search className="w-4 h-4 mr-2" />
-                      Find Game
+                      Find Opponent
                     </>
                   )}
                 </Button>
@@ -270,6 +284,7 @@ const Matchmaking = () => {
                     {formatTime(waitTime)}
                   </div>
                 </div>
+
                 <Button
                   onClick={handleLeaveQueue}
                   disabled={isLoading}
@@ -291,9 +306,10 @@ const Matchmaking = () => {
                 </Button>
               </div>
             )}
+
             <div className="mt-8 pt-6 border-t border-border">
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>Your Rating</span>
+                <span>Your Rating ({getTimeControlLabel(ratingKey)})</span>
                 <span className="font-semibold text-foreground">{user[ratingKey]}</span>
               </div>
             </div>
@@ -303,4 +319,5 @@ const Matchmaking = () => {
     </MainLayout>
   );
 };
+
 export default Matchmaking;

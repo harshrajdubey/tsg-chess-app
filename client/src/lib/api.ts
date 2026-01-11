@@ -1,13 +1,12 @@
-
-
-export const API_BASE_URL = 'http://localhost:3001';
+// API Base URL from environment variable
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export type GameHistoryEntry = {
   gameId: string;
   opponentUserId: string;
   opponentUsername: string;
   result: 'won' | 'lost' | 'draw';
-  ratingChange: number; // The rating change from this game (+/-)
+  ratingChange: number;
   timeControl: string;
   termination: string;
   playedAt: string;
@@ -99,8 +98,6 @@ export async function updateUser(userId: string, updates: Partial<User>, token: 
 }
 
 export type Mode = "bullet" | "blitz" | "rapid" | "bot";
-
-
 
 export type TimeControl = {
   initialMs: number;
@@ -198,7 +195,19 @@ export type GameState = {
   timeControlKey: string;
   createdAt: number;
   lastMoveTimestamp: number;
-  gameStarted: boolean; // Timer only starts after white's first move
+  gameStarted: boolean;
+  moveHistory?: MoveHistoryEntry[];
+};
+
+export type MoveHistoryEntry = {
+  from: string;
+  to: string;
+  san: string;
+  promotion?: string;
+  color: string;
+  piece: string;
+  captured?: string;
+  timestamp: number;
 };
 
 export async function getGameState(token: string, gameId: string): Promise<GameState> {
@@ -329,3 +338,4 @@ export async function claimTimeout(gameId: string, token: string) {
   if (!res.ok) throw new Error(data.error || 'Claim timeout failed');
   return data;
 }
+

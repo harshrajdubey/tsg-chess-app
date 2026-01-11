@@ -12,6 +12,22 @@ const SocketContext = createContext<SocketContextType>({ socket: null, isConnect
 
 export const useSocket = () => useContext(SocketContext);
 
+// Get socket URL from environment or default
+const getSocketUrl = () => {
+    if (import.meta.env.VITE_WS_BASE_URL) {
+        return import.meta.env.VITE_WS_BASE_URL;
+    }
+    if (import.meta.env.VITE_API_BASE_URL) {
+        return import.meta.env.VITE_API_BASE_URL;
+    }
+    // Development fallback
+    if (import.meta.env.DEV) {
+        return 'http://localhost:3001';
+    }
+    // Production: assume same origin
+    return window.location.origin;
+};
+
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, isAuthenticated } = useAuth();
     const [socket, setSocket] = useState<Socket | null>(null);
@@ -38,19 +54,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const token = localStorage.getItem('auth_token');
         if (!token) return;
 
-        const wsBase = import.meta.env.VITE_WS_BASE_URL ?? window.location.origin;
-        // Assuming backend is on same origin or configured via env
-        // If running separately locally, might need specific URL (e.g., http://localhost:3001)
-
-        // Check if we are in dev mode and backend is on different port
-        const socketUrl = import.meta.env.DEV ? 'http://localhost:3001' : wsBase;
-
+        const socketUrl = getSocketUrl();
         console.log('[SocketProvider] Connecting to', socketUrl);
 
         const newSocket = io(socketUrl, {
             auth: { token },
-            reconnectionAttempts: 5,
-            transports: ['websocket', 'polling'], // Matches backend
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            transports: ['websocket', 'polling'],
         });
 
         newSocket.on('connect', () => {
@@ -60,7 +72,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on('connect_error', (err) => {
             console.error('[SocketProvider] Connection error:', err);
-            // Optional: Toast specific errors
             if (err.message === 'Authentication failed') {
                 toast({ title: 'Socket Auth Failed', variant: 'destructive' });
             }
@@ -71,19 +82,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setIsConnected(false);
         });
 
+        newSocket.on('reconnect', (attemptNumber) => {
+            console.log('[SocketProvider] Reconnected after', attemptNumber, 'attempts');
+            setIsConnected(true);
+        });
+
         socketRef.current = newSocket;
         setSocket(newSocket);
 
         return () => {
-            // We don't necessarily want to disconnect on every re-render/unmount of provider 
-            // if the provider is at App root. 
-            // But if user changes, we definitely want to cleanup.
-            // The dependency array is [isAuthenticated, user].
-            if (socketRef.current) {
-                // socketRef.current.disconnect(); 
-                // Actually, do we want to disconnect? Yes, if user changes.
-                // But if just hot-reload? 
-            }
+            // Don't disconnect on re-render, only on actual unmount or user change
         };
     }, [isAuthenticated, user]);
 
