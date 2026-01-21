@@ -12,14 +12,17 @@ const SocketContext = createContext<SocketContextType>({ socket: null, isConnect
 
 export const useSocket = () => useContext(SocketContext);
 
-// Get socket URL from environment or default
 const getSocketUrl = () => {
+    let url = '/';
     if (import.meta.env.VITE_WS_BASE_URL) {
-        return import.meta.env.VITE_WS_BASE_URL;
+        url = import.meta.env.VITE_WS_BASE_URL;
     }
-    // Default to relative path / (uses current origin)
-    // This works with Vite proxy in dev and Nginx in prod
-    return '/';
+    
+    // Fix for "Invalid namespace" error:
+    // If the URL ends with /api, Socket.IO tries to connect to the "/api" namespace.
+    // Our server only has the default "/" namespace.
+    // We strip /api to ensure we connect to the root namespace.
+    return url.replace(/\/api\/?$/, '');
 };
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
