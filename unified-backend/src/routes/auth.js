@@ -16,6 +16,11 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Username, email, password, and hall of residence are required' });
         }
 
+        // Validate email domain
+        if (!email.endsWith('@kgpian.iitkgp.ac.in')) {
+            return res.status(400).json({ error: 'Please use your IIT KGP email ID (@kgpian.iitkgp.ac.in)' });
+        }
+
         // Validate username: no spaces, convert to lowercase
         if (/\s/.test(username)) {
             return res.status(400).json({ error: 'Username cannot contain spaces' });
@@ -59,6 +64,11 @@ router.post('/login', async (req, res) => {
         const user = await UserRepository.findByUsername(username, false); // Include password for comparison
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Validate email domain
+        if (!user.email.endsWith('@kgpian.iitkgp.ac.in')) {
+            return res.status(403).json({ error: 'Access restricted to @kgpian.iitkgp.ac.in emails' });
         }
 
         await UserRepository.setOnline(user.userId, true);

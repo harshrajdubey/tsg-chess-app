@@ -35,6 +35,11 @@ const Signup = () => {
       return;
     }
 
+    if (!form.email.endsWith('@kgpian.iitkgp.ac.in')) {
+      setValidationError('Please use your IIT KGP email ID (@kgpian.iitkgp.ac.in)');
+      return;
+    }
+
     if (!form.hallOfResidence) {
       setValidationError('Please select your hall of residence');
       return;
@@ -97,7 +102,7 @@ const Signup = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder="Enter your @kgpian.iitkgp.ac.in email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   required

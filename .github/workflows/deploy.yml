@@ -1,0 +1,39 @@
+name: CD – Deploy Chess App
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: chess-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_DEPLOY_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /home/ubuntu/tsg-chess-app
+
+            echo "▶ Pulling latest code"
+            git pull origin main
+
+            echo "▶ Building & restarting containers"
+            docker compose down
+            docker compose up -d --build
+
+            echo "▶ Cleaning unused images"
+            docker image prune -f

@@ -39,7 +39,7 @@ const Login = () => {
             </div>
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
             <CardDescription>
-              Enter your credentials to access your account
+              Enter your credentials to access your account. Only @kgpian.iitkgp.ac.in emails are allowed.
             </CardDescription>
           </CardHeader>
           <CardContent>
