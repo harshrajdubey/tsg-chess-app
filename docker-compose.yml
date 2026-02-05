@@ -68,17 +68,14 @@ services:
   frontend:
     build:
       context: ./client
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost/api}
+        VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-http://localhost}
     container_name: chess-frontend
     restart: unless-stopped
     ports:
-      - "8080:8080"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:3001
-      - VITE_WS_BASE_URL=http://localhost:3001
-    volumes:
-      - ./client:/app
-      - /app/node_modules
+      - "8080:80"
     networks:
       - chess-network
 
