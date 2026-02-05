@@ -41,7 +41,51 @@ function extractMoveHistory(chess) {
     }));
 }
 
-async function createGame({ whitePlayerId, blackPlayerId, timeControl, timeControlKey }) {
+// Generate PGN string from game data
+function generatePGN({ whiteUsername, blackUsername, result, moves, timeControl, termination }) {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+
+    // Determine PGN result string
+    let pgnResult = '*';
+    if (result === 'white') {
+        pgnResult = '1-0';
+    } else if (result === 'black') {
+        pgnResult = '0-1';
+    } else if (result === 'draw') {
+        pgnResult = '1/2-1/2';
+    }
+
+    // Build PGN headers
+    const headers = [
+        `[Event "TSG Chess Game"]`,
+        `[Site "TSG Chess Platform"]`,
+        `[Date "${dateStr}"]`,
+        `[White "${whiteUsername}"]`,
+        `[Black "${blackUsername}"]`,
+        `[Result "${pgnResult}"]`,
+        `[TimeControl "${timeControl}"]`,
+        `[Termination "${termination}"]`,
+    ];
+
+    // Build move text from moves array
+    const moveHistory = moves || [];
+    const moveLines = [];
+    for (let i = 0; i < moveHistory.length; i += 2) {
+        const moveNumber = Math.floor(i / 2) + 1;
+        const whiteMove = moveHistory[i]?.san || '';
+        const blackMove = moveHistory[i + 1]?.san || '';
+        if (blackMove) {
+            moveLines.push(`${moveNumber}. ${whiteMove} ${blackMove}`);
+        } else if (whiteMove) {
+            moveLines.push(`${moveNumber}. ${whiteMove}`);
+        }
+    }
+
+    return `${headers.join('\n')}\n\n${moveLines.join(' ')} ${pgnResult}`;
+}
+
+async function createGame({ whitePlayerId, blackPlayerId, timeControl, timeControlKey, isFriendly = false }) {
     const gameId = uuidv4();
     const chess = new Chess();
 
@@ -55,6 +99,7 @@ async function createGame({ whitePlayerId, blackPlayerId, timeControl, timeContr
         incrementMs: timeControl.incrementMs || 0,
         timeControl,
         timeControlKey,
+        isFriendly: !!isFriendly, // Ensure boolean
         createdAt: Date.now(),
         lastMoveTimestamp: Date.now(),
         gameStarted: false,
@@ -127,7 +172,7 @@ async function handlePlayerMove(gameId, playerId, move) {
         // Update State
         gameState.fen = chess.fen();
         gameState.lastMoveTimestamp = now;
-        
+
         // Store the move for incremental updates
         if (!gameState.moveHistory) gameState.moveHistory = [];
         gameState.moveHistory.push({
@@ -152,10 +197,10 @@ async function handlePlayerMove(gameId, playerId, move) {
         }
 
         await redis.set(`game:${gameId}`, JSON.stringify(gameState));
-        
+
         // Return the move details for incremental broadcast
-        return { 
-            success: true, 
+        return {
+            success: true,
             newState: gameState,
             move: {
                 from: moveResult.from,
@@ -271,7 +316,7 @@ async function claimTimeout(gameId, claimantId) {
 }
 
 async function updateRatingsAndHistory(gameState, winner, reason, chess) {
-    console.log(`[DEBUG updateRatingsAndHistory] Called with winner: ${winner}, reason: ${reason}`);
+    console.log(`[DEBUG updateRatingsAndHistory] Called with winner: ${winner}, reason: ${reason}, isFriendly: ${gameState.isFriendly}`);
 
     const whiteUser = await UserRepository.findByUserId(gameState.whitePlayerId, false);
     const blackUser = await UserRepository.findByUserId(gameState.blackPlayerId, false);
@@ -282,38 +327,59 @@ async function updateRatingsAndHistory(gameState, winner, reason, chess) {
     }
 
     const timeControlKey = gameState.timeControlKey || 'rapid';
-    const whiteRating = whiteUser[timeControlKey] || 1200;
-    const blackRating = blackUser[timeControlKey] || 1200;
-
-    let whiteScore = 0.5;
-    if (winner === 'white') whiteScore = 1;
-    else if (winner === 'black') whiteScore = 0;
-
-    const whiteChange = calculateRatingChange(whiteRating, blackRating, whiteScore);
-    const blackChange = calculateRatingChange(blackRating, whiteRating, 1 - whiteScore);
-
-    const newWhiteRating = whiteRating + whiteChange;
-    const newBlackRating = blackRating + blackChange;
-
-    const finishDate = new Date();
     const finalFen = gameState.fen;
     const moves = gameState.moveHistory || [];
 
-    // Update White user rating and stats
-    await UserRepository.updateRatingAndStats(gameState.whitePlayerId, {
-        timeControlKey,
-        newRating: newWhiteRating,
-        isWin: winner === 'white',
-        ratingChange: whiteChange,
+    // Generate PGN for this game
+    const pgn = generatePGN({
+        whiteUsername: whiteUser.username,
+        blackUsername: blackUser.username,
+        result: winner,
+        moves,
+        timeControl: timeControlKey,
+        termination: reason,
     });
 
-    // Update Black user rating and stats
-    await UserRepository.updateRatingAndStats(gameState.blackPlayerId, {
-        timeControlKey,
-        newRating: newBlackRating,
-        isWin: winner === 'black',
-        ratingChange: blackChange,
-    });
+    let whiteChange = 0;
+    let blackChange = 0;
+    let newWhiteRating = whiteUser[timeControlKey] || 1200;
+    let newBlackRating = blackUser[timeControlKey] || 1200;
+
+    // Only calculate and update ratings if NOT friendly
+    if (!gameState.isFriendly) {
+        const whiteRating = whiteUser[timeControlKey] || 1200;
+        const blackRating = blackUser[timeControlKey] || 1200;
+
+        let whiteScore = 0.5;
+        if (winner === 'white') whiteScore = 1;
+        else if (winner === 'black') whiteScore = 0;
+
+        whiteChange = calculateRatingChange(whiteRating, blackRating, whiteScore);
+        blackChange = calculateRatingChange(blackRating, whiteRating, 1 - whiteScore);
+
+        newWhiteRating = whiteRating + whiteChange;
+        newBlackRating = blackRating + blackChange;
+
+        // Update White user rating and stats
+        await UserRepository.updateRatingAndStats(gameState.whitePlayerId, {
+            timeControlKey,
+            newRating: newWhiteRating,
+            isWin: winner === 'white',
+            ratingChange: whiteChange,
+        });
+
+        // Update Black user rating and stats
+        await UserRepository.updateRatingAndStats(gameState.blackPlayerId, {
+            timeControlKey,
+            newRating: newBlackRating,
+            isWin: winner === 'black',
+            ratingChange: blackChange,
+        });
+
+        console.log(`[GameService] Ratings updated. White: ${whiteRating}->${newWhiteRating}, Black: ${blackRating}->${newBlackRating}`);
+    } else {
+        console.log(`[GameService] Friendly game - skipping rating updates. code: 200`);
+    }
 
     // Add to game history for both players
     await GameHistoryRepository.addGameToHistory({
@@ -327,6 +393,8 @@ async function updateRatingsAndHistory(gameState, winner, reason, chess) {
         termination: reason,
         finalFen,
         moves,
+        pgn,
+        isFriendly: gameState.isFriendly,
     });
 
     await GameHistoryRepository.addGameToHistory({
@@ -340,17 +408,20 @@ async function updateRatingsAndHistory(gameState, winner, reason, chess) {
         termination: reason,
         finalFen,
         moves,
+        pgn,
+        isFriendly: gameState.isFriendly,
     });
 
-    console.log(`[GameService] History & Ratings saved. White: ${whiteRating}->${newWhiteRating}, Black: ${blackRating}->${newBlackRating}`);
-    
     return {
         whiteRatingChange: whiteChange,
         blackRatingChange: blackChange,
         newWhiteRating,
-        newBlackRating
+        newBlackRating,
+        isFriendly: gameState.isFriendly
     };
 }
+
+
 
 function getTerminationReason(chess) {
     if (chess.isCheckmate()) return 'checkmate';
