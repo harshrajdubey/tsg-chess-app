@@ -62,9 +62,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    #volumes:
-    #  - ./unified-backend:/app
-    #  - /app/node_modules
+    volumes:
+      - ./unified-backend:/app
+      - /app/node_modules
     networks:
       - chess-network
 
@@ -88,7 +88,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
 
 networks:
   chess-network:
