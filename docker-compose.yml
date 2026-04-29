@@ -80,13 +80,14 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
+    depends_on:
+      - backend
     networks:
       - chess-network
 
 volumes:
   postgres_data:
   redis_data:
-
 
 networks:
   chess-network:
