@@ -1,13 +1,17 @@
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
+
+const SMTP_USER = process.env.SMTP_USER || "tech.tsgiitkgp@gmail.com";
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "Chess App, TSG";
 
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
 });
 
 /**
@@ -16,14 +20,14 @@ const transporter = nodemailer.createTransport({
  * @param {string} token - The unhashed reset token (will be included in the link)
  */
 async function sendPasswordResetEmail(to, token) {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const resetLink = `${clientUrl}/reset-password?token=${token}`;
+  const clientUrl = process.env.CLIENT_URL || "http://localhost:8080";
+  const resetLink = `${clientUrl}/reset-password?token=${token}`;
 
-    const mailOptions = {
-        from: `"TSG Chess Platform" <${process.env.SMTP_USER}>`,
-        to,
-        subject: 'Password Reset - TSG Chess Platform',
-        html: `
+  const mailOptions = {
+    from: `"${SMTP_FROM_NAME}" <${SMTP_USER}>`,
+    to,
+    subject: "Password Reset - TSG Chess Platform",
+    html: `
             <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
                 <h2 style="color: #1a1a2e;">Reset Your Password</h2>
                 <p>You requested a password reset for your TSG Chess Platform account.</p>
@@ -36,9 +40,9 @@ async function sendPasswordResetEmail(to, token) {
                 <p style="font-size: 12px; color: #999;">TSG Chess Platform &bull; IIT Kharagpur</p>
             </div>
         `,
-    };
+  };
 
-    await transporter.sendMail(mailOptions);
+  const info = await transporter.sendMail(mailOptions);
 }
 
 module.exports = { sendPasswordResetEmail };
