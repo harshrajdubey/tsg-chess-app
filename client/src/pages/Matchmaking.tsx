@@ -89,7 +89,24 @@ const Matchmaking = () => {
 
         const status = await api.getMatchmakingStatus(user.userId, token);
         if (status.hasGame && status.gameId) {
-          navigate(`/game/${status.gameId}`);
+          // Avoid immediately redirecting back to a game the user just left
+          try {
+            const raw = localStorage.getItem('tsg_just_left_game');
+            if (raw) {
+              const parsed = JSON.parse(raw as string) as { gameId?: string; ts: number };
+              const age = Date.now() - (parsed.ts || 0);
+              if (parsed.gameId === status.gameId && age < 5000) {
+                // ignore redirect and remove the flag
+                localStorage.removeItem('tsg_just_left_game');
+              } else {
+                navigate(`/game/${status.gameId}`);
+              }
+            } else {
+              navigate(`/game/${status.gameId}`);
+            }
+          } catch {
+            navigate(`/game/${status.gameId}`);
+          }
         } else if (status.inQueue) {
           setIsInQueue(true);
           setActiveQueueType(status.timeControl || null);
